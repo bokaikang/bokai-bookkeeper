@@ -1,0 +1,584 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>博凱記帳 v0.1（離線測試版）</title>
+  <style>
+    :root{
+      --bg:#0b0d10; --card:#11151b; --muted:#9aa4b2; --text:#e6edf3;
+      --accent:#22c55e; --danger:#ef4444; --warn:#f59e0b; --line:#1f2937;
+      --chip:#0f172a;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Noto Sans TC,"PingFang TC","Microsoft JhengHei",sans-serif;background:var(--bg);color:var(--text)}
+    header{position:sticky;top:0;z-index:10;background:rgba(11,13,16,.92);backdrop-filter: blur(10px);border-bottom:1px solid var(--line)}
+    .wrap{max-width:980px;margin:0 auto;padding:14px 14px 26px}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .title{font-weight:800;font-size:20px;letter-spacing:.5px}
+    .pill{font-size:12px;color:var(--muted);padding:6px 10px;border:1px solid var(--line);border-radius:999px;background:rgba(17,21,27,.6)}
+    nav{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+    button, input, select, textarea{font:inherit}
+    .tab{padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:transparent;color:var(--text);cursor:pointer}
+    .tab.active{background:linear-gradient(180deg,rgba(34,197,94,.20),rgba(34,197,94,.06));border-color:rgba(34,197,94,.35)}
+    .btn{padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:rgba(17,21,27,.9);color:var(--text);cursor:pointer}
+    .btn.primary{background:rgba(34,197,94,.15);border-color:rgba(34,197,94,.35)}
+    .btn.danger{background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.30)}
+    .btn.ghost{background:transparent}
+    .grid{display:grid;gap:12px}
+    .g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+    @media (max-width:720px){.g2,.g3{grid-template-columns:1fr}}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px}
+    .card h3{margin:0 0 10px;font-size:14px;color:var(--muted);font-weight:700}
+    .big{font-size:28px;font-weight:900;letter-spacing:.5px}
+    .big.green{color:var(--accent)} .big.red{color:var(--danger)}
+    .big.warn{color:var(--warn)}
+    .sub{color:var(--muted);font-size:12px}
+    .form{display:grid;gap:10px}
+    label{display:grid;gap:6px;color:var(--muted);font-size:12px}
+    input, select, textarea{
+      padding:10px 12px;border-radius:12px;border:1px solid var(--line);
+      background:#0c1117;color:var(--text)
+    }
+    textarea{min-height:76px;resize:vertical}
+    .seg{display:flex;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+    .seg button{flex:1;padding:10px;border:0;background:transparent;color:var(--muted)}
+    .seg button.active{background:rgba(239,68,68,.18);color:var(--text)}
+    .seg button.active.in{background:rgba(34,197,94,.18)}
+    .chips{display:flex;gap:8px;flex-wrap:wrap}
+    .chip{padding:10px 12px;border-radius:14px;border:1px solid var(--line);background:rgba(15,23,42,.55);cursor:pointer;color:var(--text)}
+    .chip.active{border-color:rgba(34,197,94,.45);background:rgba(34,197,94,.10)}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:10px 8px;border-bottom:1px solid var(--line);font-size:13px}
+    th{color:var(--muted);font-weight:700;text-align:left}
+    .amt.in{color:var(--accent);font-weight:800}
+    .amt.out{color:var(--danger);font-weight:800}
+    .k{color:var(--muted)}
+    .right{margin-left:auto}
+    .empty{color:var(--muted);text-align:center;padding:18px;border:1px dashed var(--line);border-radius:14px}
+    .footerNote{color:var(--muted);font-size:12px;line-height:1.6}
+    .toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#0c1117;border:1px solid var(--line);padding:10px 12px;border-radius:14px;display:none;max-width:92vw}
+  </style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="row">
+      <div class="title">博凱記帳 v0.1</div>
+      <div class="pill">離線測試版（資料存在本機瀏覽器）</div>
+      <div class="right row">
+        <button class="btn ghost" id="btnReset">清空資料</button>
+        <button class="btn" id="btnExport">匯出 CSV</button>
+      </div>
+    </div>
+    <nav id="tabs"></nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section id="view"></section>
+  <div style="height:14px"></div>
+  <div class="footerNote">
+    ✅ 這是「先讓你邊用邊測」的版本：不需要登入、不需要雲端。<br/>
+    下一步我們會把你覺得順手的流程留下來，再升級到 v1（雲端同步/多裝置/收據照片）。<br/>
+    小提醒：如果你清除瀏覽器資料，本機帳也會被清掉。
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/** ---------- storage ---------- **/
+const KEY="bokai_bookkeeper_v01";
+function loadState(){
+  try{
+    const raw=localStorage.getItem(KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(e){}
+  return {
+    settings:{currency:"TWD"},
+    lastUsed:{type:"out", accountId:"cash", categoryPath:"餐飲/餐飲"},
+    accounts:[
+      {id:"cash", name:"現金", kind:"現金", balance:0},
+      {id:"bank", name:"銀行", kind:"銀行", balance:0},
+      {id:"card", name:"信用卡", kind:"信用卡", balance:0},
+      {id:"company", name:"公司", kind:"公司", balance:0},
+    ],
+    categories:[
+      {parent:"餐飲", icon:"🍽️", locked:true, children:["餐飲","早餐","下午茶","宵夜"]},
+      {parent:"交通", icon:"🚌", locked:true, children:["捷運","公車","計程車","停車"]},
+      {parent:"居住", icon:"🏠", locked:true, children:["房租","水電","管理費"]},
+      {parent:"通訊", icon:"📱", locked:true, children:["電信","網路","訂閱"]},
+      {parent:"教育", icon:"🎓", locked:true, children:["課程","書籍"]},
+    ],
+    tx:[]
+  }
+}
+function saveState(){ localStorage.setItem(KEY, JSON.stringify(state)); }
+let state = loadState();
+
+/** ---------- helpers ---------- **/
+const fmt = (n)=> (Number(n)||0).toLocaleString("zh-Hant-TW",{maximumFractionDigits:2, minimumFractionDigits:0});
+const todayISO = ()=> new Date().toISOString().slice(0,10);
+function toast(msg){
+  const el=document.getElementById("toast");
+  el.textContent=msg;
+  el.style.display="block";
+  clearTimeout(toast._t);
+  toast._t=setTimeout(()=> el.style.display="none", 1600);
+}
+function getMonthKey(d){ return (d||todayISO()).slice(0,7); }
+function sumForMonth(monthKey){
+  let inc=0, out=0;
+  state.tx.filter(t=>t.date.startsWith(monthKey)).forEach(t=>{
+    if(t.type==="in") inc += Number(t.amount)||0;
+    else out += Number(t.amount)||0;
+  });
+  return {inc,out, net: inc-out};
+}
+function accountById(id){ return state.accounts.find(a=>a.id===id); }
+
+/** ---------- tabs ---------- **/
+const TABLIST=[
+  {id:"overview", label:"總覽"},
+  {id:"quick", label:"快速記帳"},
+  {id:"tx", label:"帳目列表"},
+  {id:"accounts", label:"帳戶管理"},
+  {id:"categories", label:"分類管理"},
+];
+let activeTab = "overview";
+
+function renderTabs(){
+  const nav=document.getElementById("tabs");
+  nav.innerHTML="";
+  TABLIST.forEach(t=>{
+    const b=document.createElement("button");
+    b.className="tab"+(t.id===activeTab?" active":"");
+    b.textContent=t.label;
+    b.onclick=()=>{activeTab=t.id; render();};
+    nav.appendChild(b);
+  });
+}
+
+/** ---------- views ---------- **/
+function viewOverview(){
+  const month=getMonthKey();
+  const {inc,out,net}=sumForMonth(month);
+
+  return `
+  <div class="row" style="margin:6px 0 12px">
+    <div class="pill">本月：${month.replace("-","年")}月</div>
+    <button class="btn primary right" onclick="goQuick()">＋ 記一筆</button>
+  </div>
+
+  <div class="grid g3">
+    <div class="card">
+      <h3>本月收入</h3>
+      <div class="big green">$${fmt(inc)}</div>
+    </div>
+    <div class="card">
+      <h3>本月支出</h3>
+      <div class="big red">$${fmt(out)}</div>
+    </div>
+    <div class="card">
+      <h3>本月結餘</h3>
+      <div class="big ${net>=0?"green":"red"}">${net>=0?"+":""}$${fmt(net)}</div>
+    </div>
+  </div>
+
+  <div style="height:12px"></div>
+
+  <div class="card">
+    <h3>最近 10 筆</h3>
+    ${renderTxTable(state.tx.slice().sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time)).slice(0,10))}
+  </div>
+  `;
+}
+
+function viewQuick(){
+  const last=state.lastUsed || {type:"out"};
+  const defaultType = last.type || "out";
+  const defaultAcc = last.accountId || state.accounts[0]?.id || "cash";
+  const defaultPath = last.categoryPath || "餐飲/餐飲";
+
+  const [defaultParent, defaultChild] = defaultPath.split("/");
+
+  const parentOptions = state.categories.map(c=>`<option value="${c.parent}" ${c.parent===defaultParent?"selected":""}>${c.parent}</option>`).join("");
+
+  const childOptions = (state.categories.find(c=>c.parent===defaultParent)?.children||[]).map(ch=>`<option value="${ch}" ${ch===defaultChild?"selected":""}>${ch}</option>`).join("");
+
+  const accOptions = state.accounts.map(a=>`<option value="${a.id}" ${a.id===defaultAcc?"selected":""}>${a.name}（${a.kind}）</option>`).join("");
+
+  return `
+  <div class="card">
+    <h3>快速記帳</h3>
+
+    <div class="seg" role="tablist" aria-label="收支切換">
+      <button id="segOut" class="${defaultType==="out"?"active":""}" onclick="setType('out')">支出</button>
+      <button id="segIn" class="${defaultType==="in"?"active in":""}" onclick="setType('in')">收入</button>
+    </div>
+
+    <div style="height:10px"></div>
+
+    <div class="form">
+      <label>金額
+        <input id="amount" inputmode="decimal" placeholder="例如：120" />
+      </label>
+
+      <label>帳戶
+        <select id="account">${accOptions}</select>
+      </label>
+
+      <div class="grid g2">
+        <label>分類（父）
+          <select id="parentCat" onchange="onParentChange()">${parentOptions}</select>
+        </label>
+        <label>分類（子）
+          <select id="childCat">${childOptions}</select>
+        </label>
+      </div>
+
+      <div class="grid g2">
+        <label>日期
+          <input id="date" type="date" value="${todayISO()}" />
+        </label>
+        <label>時間
+          <input id="time" type="time" value="${new Date().toTimeString().slice(0,5)}" />
+        </label>
+      </div>
+
+      <label>備註（選填）
+        <textarea id="note" placeholder="例如：午餐 / 客戶請客 / 材料費…"></textarea>
+      </label>
+
+      <div class="row">
+        <button class="btn primary" onclick="saveTx()">儲存</button>
+        <button class="btn" onclick="saveTx(true)">儲存並再記一筆</button>
+        <span class="right sub">會自動記住你上次的分類/帳戶</span>
+      </div>
+    </div>
+  </div>
+  `;
+}
+
+function renderTxTable(items){
+  if(!items.length) return `<div class="empty">目前沒有資料。你可以先去「快速記帳」新增一筆試試。</div>`;
+  const rows = items.map(t=>{
+    const acc = accountById(t.accountId)?.name || t.accountId;
+    const sign = t.type==="in"?"+":"-";
+    const cls = t.type==="in"?"in":"out";
+    return `<tr>
+      <td>${t.date}<div class="sub">${t.time||""}</div></td>
+      <td>${acc}</td>
+      <td>${t.categoryPath}</td>
+      <td class="amt ${cls}">${sign}$${fmt(t.amount)}</td>
+      <td>${t.note?escapeHtml(t.note):"<span class='k'>—</span>"}</td>
+      <td style="text-align:right">
+        <button class="btn ghost" onclick="delTx('${t.id}')">刪</button>
+      </td>
+    </tr>`;
+  }).join("");
+  return `<div style="overflow:auto">
+    <table>
+      <thead><tr>
+        <th>日期</th><th>帳戶</th><th>分類</th><th>金額</th><th>備註</th><th></th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+function escapeHtml(s){
+  return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
+}
+
+function viewTx(){
+  const month=getMonthKey();
+  const opts = [...new Set(state.tx.map(t=>getMonthKey(t.date)))].sort().reverse();
+  const monthOptions = [`<option value="${month}">${month}</option>`].concat(
+    opts.filter(m=>m!==month).map(m=>`<option value="${m}">${m}</option>`)
+  ).join("");
+
+  return `
+  <div class="card">
+    <div class="row">
+      <h3 style="margin:0">帳目列表</h3>
+      <div class="right row">
+        <label class="sub">月份
+          <select id="txMonth" onchange="render()">${monthOptions}</select>
+        </label>
+        <button class="btn danger" onclick="deleteMonth()">月份刪除</button>
+        <button class="btn danger" onclick="deleteAll()">全部刪除</button>
+      </div>
+    </div>
+    <div style="height:10px"></div>
+    ${renderTxTable(state.tx.filter(t=>t.date.startsWith(document.getElementById("txMonth")?.value || month)).sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time)))}
+  </div>
+  `;
+}
+
+function viewAccounts(){
+  // recompute balances quickly from tx
+  const balances = {};
+  state.accounts.forEach(a=>balances[a.id]=0);
+  state.tx.forEach(t=>{
+    const v=Number(t.amount)||0;
+    balances[t.accountId]=(balances[t.accountId]||0) + (t.type==="in"? v : -v);
+  });
+
+  const totalAssets = Object.entries(balances).filter(([id])=> {
+    const k=accountById(id)?.kind;
+    return k!=="信用卡";
+  }).reduce((s,[,v])=>s+v,0);
+  const totalDebt = Object.entries(balances).filter(([id])=>accountById(id)?.kind==="信用卡").reduce((s,[,v])=>s+Math.max(0,-v),0);
+  const net = totalAssets - totalDebt;
+
+  const cards = state.accounts.map(a=>{
+    const b = balances[a.id]||0;
+    const isCard = a.kind==="信用卡";
+    const shown = isCard ? (-b) : b;
+    return `<div class="card">
+      <div class="row">
+        <div style="font-weight:900">${a.name}</div>
+        <div class="pill">${a.kind}</div>
+        <button class="btn ghost right" onclick="renameAccount('${a.id}')">編輯</button>
+      </div>
+      <div style="height:6px"></div>
+      <div class="big ${shown>=0?"green":"red"}">$${fmt(shown)}</div>
+      <div class="sub">${isCard?"（信用卡顯示欠款）":"（收支累積）"}</div>
+    </div>`;
+  }).join("");
+
+  return `
+  <div class="grid g3">
+    <div class="card"><h3>總資產</h3><div class="big green">$${fmt(totalAssets)}</div></div>
+    <div class="card"><h3>總負債</h3><div class="big red">$${fmt(totalDebt)}</div></div>
+    <div class="card"><h3>淨資產</h3><div class="big ${net>=0?"green":"red"}">$${fmt(net)}</div></div>
+  </div>
+  <div style="height:12px"></div>
+  <div class="row">
+    <button class="btn primary" onclick="addAccount()">＋ 新增帳戶</button>
+    <div class="sub">v0.1 先做最小可用：帳戶名稱可改、可新增；類型分為 現金/銀行/信用卡/公司</div>
+  </div>
+  <div style="height:10px"></div>
+  <div class="grid g2">${cards}</div>
+  `;
+}
+
+function viewCategories(){
+  const items = state.categories.map((c,idx)=>{
+    const children = c.children.map(ch=>`<span class="pill" style="border-style:dashed">${ch}</span>`).join(" ");
+    return `<div class="card">
+      <div class="row">
+        <div style="font-weight:900">${c.icon} ${c.parent}</div>
+        ${c.locked?`<div class="pill">預設分類</div>`:`<div class="pill">自訂</div>`}
+        <button class="btn ghost right" onclick="addChild(${idx})">＋ 子分類</button>
+        ${c.locked?``:`<button class="btn danger" onclick="delParent(${idx})">刪除</button>`}
+      </div>
+      <div style="height:10px"></div>
+      <div class="chips">${c.children.map(ch=>`<span class="pill">${ch}</span>`).join("")}</div>
+      <div style="height:10px"></div>
+      ${c.locked?`<div class="sub">預設分類不可刪除，但可以新增子分類。</div>`:`<div class="sub">刪父分類前請先刪光子分類（跟你影片裡的規則一致）。</div>`}
+    </div>`;
+  }).join("");
+
+  return `
+  <div class="row">
+    <button class="btn primary" onclick="addParent()">＋ 新增父分類</button>
+    <div class="sub">v0.1 規則：父分類可新增，預設父分類不可刪，父分類要刪除需先清空子分類。</div>
+  </div>
+  <div style="height:10px"></div>
+  <div class="grid g2">${items}</div>
+  `;
+}
+
+/** ---------- actions ---------- **/
+function goQuick(){ activeTab="quick"; render(); }
+window.goQuick = goQuick;
+
+let currentType="out";
+function setType(t){
+  currentType=t;
+  document.getElementById("segOut")?.classList.toggle("active", t==="out");
+  document.getElementById("segIn")?.classList.toggle("active", t==="in");
+  if(t==="in"){ document.getElementById("segIn")?.classList.add("in"); }
+  // remember
+  state.lastUsed.type=t; saveState();
+}
+window.setType=setType;
+
+function onParentChange(){
+  const p=document.getElementById("parentCat").value;
+  const cat=state.categories.find(c=>c.parent===p);
+  const child=document.getElementById("childCat");
+  child.innerHTML=(cat?.children||[]).map(ch=>`<option value="${ch}">${ch}</option>`).join("");
+}
+window.onParentChange=onParentChange;
+
+function saveTx(again=false){
+  const amount = (document.getElementById("amount").value||"").trim();
+  const v=Number(amount);
+  if(!amount || !isFinite(v) || v<=0){ toast("金額請輸入大於 0 的數字"); return; }
+  const accountId=document.getElementById("account").value;
+  const parent=document.getElementById("parentCat").value;
+  const child=document.getElementById("childCat").value;
+  const date=document.getElementById("date").value || todayISO();
+  const time=document.getElementById("time").value || "00:00";
+  const note=(document.getElementById("note").value||"").trim();
+
+  const id = "tx_"+Math.random().toString(16).slice(2)+Date.now().toString(16);
+  const tx={id, type:currentType, amount:v, accountId, categoryPath:`${parent}/${child}`, date, time, note};
+  state.tx.push(tx);
+
+  // remember last used
+  state.lastUsed = {type:currentType, accountId, categoryPath:`${parent}/${child}`};
+
+  saveState();
+  toast("已儲存");
+  if(again){
+    document.getElementById("amount").value="";
+    document.getElementById("note").value="";
+    document.getElementById("amount").focus();
+  }else{
+    activeTab="overview";
+    render();
+  }
+}
+window.saveTx=saveTx;
+
+function delTx(id){
+  const i=state.tx.findIndex(t=>t.id===id);
+  if(i>=0){
+    state.tx.splice(i,1);
+    saveState();
+    toast("已刪除");
+    render();
+  }
+}
+window.delTx=delTx;
+
+function deleteMonth(){
+  const month = document.getElementById("txMonth")?.value || getMonthKey();
+  if(!confirm(`確定刪除 ${month} 的所有帳目？`)) return;
+  state.tx = state.tx.filter(t=>!t.date.startsWith(month));
+  saveState(); toast("已刪除該月份"); render();
+}
+window.deleteMonth=deleteMonth;
+
+function deleteAll(){
+  if(!confirm("確定刪除全部帳目？")) return;
+  state.tx=[]; saveState(); toast("已刪除全部"); render();
+}
+window.deleteAll=deleteAll;
+
+function addAccount(){
+  const name=prompt("帳戶名稱？（例如：玉山/富邦/現金）");
+  if(!name) return;
+  const kind=prompt("帳戶類型？請輸入：現金 / 銀行 / 信用卡 / 公司","銀行");
+  const k=(kind||"銀行").trim();
+  const ok=["現金","銀行","信用卡","公司"].includes(k);
+  const kind2 = ok? k : "銀行";
+  const id="acc_"+Math.random().toString(16).slice(2)+Date.now().toString(16);
+  state.accounts.push({id,name:name.trim(),kind:kind2,balance:0});
+  saveState(); toast("已新增帳戶"); render();
+}
+window.addAccount=addAccount;
+
+function renameAccount(id){
+  const a=accountById(id);
+  if(!a) return;
+  const name=prompt("修改帳戶名稱：", a.name);
+  if(!name) return;
+  a.name=name.trim();
+  saveState(); toast("已更新"); render();
+}
+window.renameAccount=renameAccount;
+
+function addParent(){
+  const name=prompt("新增父分類名稱？（例如：工作、材料、進貨）");
+  if(!name) return;
+  const parent=name.trim();
+  if(state.categories.some(c=>c.parent===parent)){ toast("已存在同名父分類"); return; }
+  const icon=prompt("想要什麼圖示？（可貼 emoji）","📦") || "📦";
+  state.categories.push({parent, icon:icon.trim(), locked:false, children:["其他"]});
+  saveState(); toast("已新增父分類"); render();
+}
+window.addParent=addParent;
+
+function addChild(idx){
+  const c=state.categories[idx];
+  const name=prompt(`在「${c.parent}」新增子分類名稱？`);
+  if(!name) return;
+  const child=name.trim();
+  if(c.children.includes(child)){ toast("子分類已存在"); return; }
+  c.children.push(child);
+  saveState(); toast("已新增子分類"); render();
+}
+window.addChild=addChild;
+
+function delParent(idx){
+  const c=state.categories[idx];
+  if(c.locked){ toast("預設分類不可刪除"); return; }
+  if(c.children.length>0){
+    alert(`注意：此父分類包含 ${c.children.length} 個子分類，請先刪除子分類。`);
+    return;
+  }
+  if(!confirm(`確定刪除父分類「${c.parent}」？`)) return;
+  state.categories.splice(idx,1);
+  saveState(); toast("已刪除父分類"); render();
+}
+window.delParent=delParent;
+
+/** ---------- export/reset ---------- **/
+function exportCSV(){
+  const header=["date","time","type","amount","account","category","note"];
+  const rows=state.tx.slice().sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time)).map(t=>[
+    t.date, t.time||"", t.type, t.amount, (accountById(t.accountId)?.name||t.accountId), t.categoryPath, (t.note||"")
+  ]);
+  const csv=[header].concat(rows).map(r=>r.map(x=>{
+    const s=String(x??"");
+    return /[",\n]/.test(s)? `"${s.replaceAll('"','""')}"`: s;
+  }).join(",")).join("\n");
+
+  const blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;
+  a.download=`bokai_bookkeeper_${getMonthKey()}_${Date.now()}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  toast("已匯出 CSV");
+}
+document.getElementById("btnExport").onclick=exportCSV;
+
+document.getElementById("btnReset").onclick=()=>{
+  if(!confirm("確定清空本機所有資料？")) return;
+  localStorage.removeItem(KEY);
+  state=loadState();
+  toast("已清空");
+  render();
+};
+
+/** ---------- render ---------- **/
+function render(){
+  renderTabs();
+  const view=document.getElementById("view");
+  if(activeTab==="overview") view.innerHTML=viewOverview();
+  else if(activeTab==="quick") view.innerHTML=viewQuick();
+  else if(activeTab==="tx") view.innerHTML=viewTx();
+  else if(activeTab==="accounts") view.innerHTML=viewAccounts();
+  else if(activeTab==="categories") view.innerHTML=viewCategories();
+
+  // set currentType on quick view
+  if(activeTab==="quick"){
+    currentType = state.lastUsed?.type || "out";
+    setType(currentType);
+    document.getElementById("account").value = state.lastUsed?.accountId || "cash";
+  }
+}
+render();
+</script>
+</body>
+</html>
